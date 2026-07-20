@@ -1,5 +1,6 @@
-// Service worker mínimo: cachea el shell de la app para que funcione offline.
-const CACHE = "cigcounter-v1";
+// Service worker: cachea el shell para offline, pero prioriza la red para el
+// HTML así las actualizaciones de la app llegan al celular sin quedar pegadas.
+const CACHE = "cigcounter-v2";
 const ASSETS = ["./", "./index.html", "./manifest.json"];
 
 self.addEventListener("install", (e) => {
@@ -17,10 +18,27 @@ self.addEventListener("activate", (e) => {
 });
 
 self.addEventListener("fetch", (e) => {
-  const url = new URL(e.request.url);
+  const req = e.request;
+  const url = new URL(req.url);
+
   // Nunca cachear las llamadas a la API de GitHub (siempre red).
   if (url.hostname === "api.github.com") return;
-  e.respondWith(
-    caches.match(e.request).then((cached) => cached || fetch(e.request))
-  );
+
+  // Documentos/navegación (el HTML de la app): network-first, con caché de respaldo offline.
+  const isDoc = req.mode === "navigate" || (req.headers.get("accept") || "").includes("text/html");
+  if (isDoc) {
+    e.respondWith(
+      fetch(req)
+        .then((res) => {
+          const copy = res.clone();
+          caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
+          return res;
+        })
+        .catch(() => caches.match(req).then((c) => c || caches.match("./index.html")))
+    );
+    return;
+  }
+
+  // Resto de assets: cache-first.
+  e.respondWith(caches.match(req).then((cached) => cached || fetch(req)));
 });

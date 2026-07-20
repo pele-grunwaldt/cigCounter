@@ -134,6 +134,11 @@
     .modal .actions { display: flex; gap: 10px; margin-top: 6px; }
     .modal .actions .btn { flex: 1; }
     .btn.primary { background: var(--accent); color: #1a1200; border-color: var(--accent); }
+    .btn.danger { background: transparent; color: var(--danger); border-color: var(--danger); width: 100%; }
+    .btn.danger:active { background: rgba(229,72,77,0.12); }
+    .danger-zone { margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--border); }
+    .danger-title { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--danger); margin-bottom: 10px; opacity: 0.85; }
+    .danger-hint { font-size: 12px; color: var(--muted); margin-top: 8px; text-align: center; }
     .link { color: var(--accent); text-decoration: none; }
     details { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; margin-bottom: 14px; }
     details summary { cursor: pointer; font-size: 13px; color: var(--muted); }
@@ -220,6 +225,12 @@
       <div class="actions">
         <button class="btn" id="cfgCancel">Cancelar</button>
         <button class="btn primary" id="cfgSave">Guardar</button>
+      </div>
+
+      <div class="danger-zone">
+        <div class="danger-title">Zona peligrosa</div>
+        <button class="btn danger" id="cfgReset">🗑️ Borrar todo y empezar de cero</button>
+        <div class="danger-hint">Borra todos los registros en el celular y en GitHub. No se puede deshacer.</div>
       </div>
     </div>
   </div>
@@ -400,18 +411,25 @@
       el.className = "sync-status" + (cls ? " " + cls : "");
     }
 
+    function ghApi() {
+      return `https://api.github.com/repos/${config.owner}/${config.repo}/contents/${encodeURIComponent(config.path).replace(/%2F/g, "/")}`;
+    }
+    function ghHeaders() {
+      return {
+        "Authorization": "Bearer " + config.token,
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28"
+      };
+    }
+
     async function sync() {
       if (!config.token) {
         toast("Configurá el token primero");
         openSettings();
         return;
       }
-      const api = `https://api.github.com/repos/${config.owner}/${config.repo}/contents/${encodeURIComponent(config.path).replace(/%2F/g, "/")}`;
-      const headers = {
-        "Authorization": "Bearer " + config.token,
-        "Accept": "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28"
-      };
+      const api = ghApi();
+      const headers = ghHeaders();
 
       setSyncStatus("Sincronizando…");
       $("syncBtn").disabled = true;
@@ -469,6 +487,50 @@
       }
     }
 
+    // Borra TODO: los registros locales y el archivo remoto (lo deja solo con encabezado).
+    async function resetAll() {
+      const n = events.length;
+      if (!confirm(`¿Borrar TODOS los registros (${n} en este celular y los de GitHub) y empezar de cero?\n\nEsta acción no se puede deshacer.`)) return;
+
+      // 1) Limpiar local
+      events = [];
+      saveEvents();
+      render();
+
+      // 2) Limpiar remoto (sobrescribir con solo el encabezado)
+      if (config.token) {
+        setSyncStatus("Borrando en GitHub…");
+        try {
+          const api = ghApi();
+          const headers = ghHeaders();
+          let sha = null;
+          const getRes = await fetch(`${api}?ref=${encodeURIComponent(config.branch)}`, { headers });
+          if (getRes.status === 200) { sha = (await getRes.json()).sha; }
+          else if (getRes.status !== 404) { throw new Error("HTTP " + getRes.status); }
+
+          const body = {
+            message: `data: reset — empezar de cero (${new Date().toISOString()})`,
+            content: utf8ToBase64("id,timestamp,date,time\n"),
+            branch: config.branch
+          };
+          if (sha) body.sha = sha;
+
+          const putRes = await fetch(api, { method: "PUT", headers, body: JSON.stringify(body) });
+          if (!putRes.ok) {
+            const err = await putRes.json().catch(() => ({}));
+            throw new Error(`HTTP ${putRes.status}. ${err.message || ""}`);
+          }
+          setSyncStatus("✓ Todo borrado — listo para empezar de cero", "ok");
+        } catch (e) {
+          setSyncStatus("✕ Se borró en el celu, pero falló en GitHub: " + e.message, "err");
+        }
+      } else {
+        setSyncStatus("✓ Registros del celular borrados", "ok");
+      }
+      closeSettings();
+      toast("A empezar de cero 🚭");
+    }
+
     // ---------- Modal de ajustes ----------
     function openSettings() {
       $("cfgOwner").value = config.owner || "";
@@ -500,6 +562,7 @@
     $("settingsBtn").addEventListener("click", openSettings);
     $("cfgCancel").addEventListener("click", closeSettings);
     $("cfgSave").addEventListener("click", saveSettings);
+    $("cfgReset").addEventListener("click", resetAll);
     $("settingsModal").addEventListener("click", (e) => {
       if (e.target === $("settingsModal")) closeSettings();
     });
