@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0f1115">
+  <title>CigCounter 🚬</title>
+
+  <!-- Instalable en pantalla de inicio (iOS/Android) -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="CigCounter">
+  <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230f1115'/%3E%3Crect x='18' y='44' width='52' height='14' rx='3' fill='%23e8e8e8'/%3E%3Crect x='70' y='44' width='12' height='14' rx='3' fill='%23f5a623'/%3E%3Crect x='52' y='24' width='4' height='16' fill='%23ff6b3d' opacity='0.9'/%3E%3C/svg%3E">
+
+  <style>
+    :root {
+      --bg: #0f1115;
+      --card: #1a1d24;
+      --card2: #22262f;
+      --text: #e8eaed;
+      --muted: #8b90a0;
+      --accent: #f5a623;
+      --accent2: #ff6b3d;
+      --danger: #e5484d;
+      --ok: #46c93a;
+      --border: #2a2f3a;
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body {
+      margin: 0; padding: 0;
+      background: var(--bg); color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
+      min-height: 100%;
+    }
+    body {
+      padding: env(safe-area-inset-top) 16px calc(env(safe-area-inset-bottom) + 16px);
+      max-width: 520px; margin: 0 auto;
+      display: flex; flex-direction: column; gap: 16px;
+    }
+    header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding-top: 20px;
+    }
+    header h1 { font-size: 20px; margin: 0; letter-spacing: -0.3px; }
+    .icon-btn {
+      background: var(--card); border: 1px solid var(--border); color: var(--text);
+      width: 42px; height: 42px; border-radius: 12px; font-size: 18px;
+      display: grid; place-items: center; cursor: pointer;
+    }
+    .icon-btn:active { transform: scale(0.94); }
+
+    /* Contador principal */
+    .today {
+      background: linear-gradient(160deg, var(--card), var(--card2));
+      border: 1px solid var(--border); border-radius: 20px;
+      padding: 22px; text-align: center;
+    }
+    .today .label { color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: 1px; }
+    .today .count { font-size: 76px; font-weight: 800; line-height: 1; margin: 6px 0; letter-spacing: -2px; }
+    .today .sub { color: var(--muted); font-size: 13px; }
+
+    /* Botón grande */
+    .smoke-btn {
+      background: linear-gradient(160deg, var(--accent), var(--accent2));
+      color: #1a1200; border: none; border-radius: 20px;
+      padding: 26px; font-size: 22px; font-weight: 800; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      box-shadow: 0 8px 24px rgba(245,166,35,0.25);
+      transition: transform 0.06s ease;
+      user-select: none;
+    }
+    .smoke-btn:active { transform: scale(0.97); }
+    .smoke-btn .big { font-size: 28px; }
+
+    .row { display: flex; gap: 10px; }
+    .row > * { flex: 1; }
+    .btn {
+      background: var(--card); border: 1px solid var(--border); color: var(--text);
+      border-radius: 14px; padding: 14px; font-size: 15px; font-weight: 600; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn.subtle { color: var(--muted); }
+    .btn:disabled { opacity: 0.45; cursor: default; }
+
+    /* Stats */
+    .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .stat { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 14px 10px; text-align: center; }
+    .stat .v { font-size: 24px; font-weight: 700; }
+    .stat .k { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
+
+    /* Historial */
+    .section-title { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin: 4px 2px; }
+    .list { display: flex; flex-direction: column; gap: 8px; }
+    .day {
+      background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+      padding: 12px 14px; display: flex; align-items: center; justify-content: space-between;
+    }
+    .day .d { font-size: 14px; }
+    .day .d small { color: var(--muted); display: block; font-size: 11px; }
+    .day .n {
+      background: var(--card2); border-radius: 20px; padding: 4px 12px;
+      font-weight: 700; font-size: 15px; min-width: 34px; text-align: center;
+    }
+    .empty { color: var(--muted); text-align: center; padding: 20px; font-size: 14px; }
+
+    .sync-status { font-size: 12px; color: var(--muted); text-align: center; min-height: 16px; }
+    .sync-status.ok { color: var(--ok); }
+    .sync-status.err { color: var(--danger); }
+
+    /* Modal */
+    .modal-bg {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+      display: none; align-items: flex-end; justify-content: center; z-index: 50;
+      padding: 0;
+    }
+    .modal-bg.open { display: flex; }
+    .modal {
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: 20px 20px 0 0; width: 100%; max-width: 520px;
+      padding: 20px 16px calc(env(safe-area-inset-bottom) + 24px);
+      max-height: 90vh; overflow-y: auto;
+    }
+    .modal h2 { margin: 0 0 4px; font-size: 18px; }
+    .modal p.hint { color: var(--muted); font-size: 13px; margin: 0 0 16px; line-height: 1.5; }
+    .field { margin-bottom: 14px; }
+    .field label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+    .field input {
+      width: 100%; background: var(--card); border: 1px solid var(--border); color: var(--text);
+      border-radius: 12px; padding: 12px; font-size: 15px;
+    }
+    .field input:focus { outline: none; border-color: var(--accent); }
+    .modal .actions { display: flex; gap: 10px; margin-top: 6px; }
+    .modal .actions .btn { flex: 1; }
+    .btn.primary { background: var(--accent); color: #1a1200; border-color: var(--accent); }
+    .link { color: var(--accent); text-decoration: none; }
+    details { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; margin-bottom: 14px; }
+    details summary { cursor: pointer; font-size: 13px; color: var(--muted); }
+    details ol { margin: 10px 0 4px; padding-left: 18px; font-size: 13px; color: var(--muted); line-height: 1.6; }
+    .toast {
+      position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 20px);
+      transform: translateX(-50%) translateY(20px); opacity: 0;
+      background: var(--card2); border: 1px solid var(--border); color: var(--text);
+      padding: 12px 18px; border-radius: 30px; font-size: 14px; font-weight: 600;
+      transition: all 0.25s ease; pointer-events: none; z-index: 100;
+    }
+    .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🚬 CigCounter</h1>
+    <button class="icon-btn" id="settingsBtn" aria-label="Ajustes">⚙️</button>
+  </header>
+
+  <div class="today">
+    <div class="label">Hoy</div>
+    <div class="count" id="todayCount">0</div>
+    <div class="sub" id="todaySub">Ningún cigarrillo todavía</div>
+  </div>
+
+  <button class="smoke-btn" id="smokeBtn">
+    <span class="big">＋</span> Fumé uno
+  </button>
+
+  <div class="row">
+    <button class="btn subtle" id="undoBtn">↩︎ Deshacer</button>
+    <button class="btn" id="syncBtn">☁︎ Sincronizar</button>
+  </div>
+  <div class="sync-status" id="syncStatus"></div>
+
+  <div class="stats">
+    <div class="stat"><div class="v" id="statWeek">0</div><div class="k">7 días</div></div>
+    <div class="stat"><div class="v" id="statAvg">0</div><div class="k">Prom/día</div></div>
+    <div class="stat"><div class="v" id="statTotal">0</div><div class="k">Total</div></div>
+  </div>
+
+  <div class="section-title">Historial</div>
+  <div class="list" id="history"></div>
+
+  <!-- Modal de ajustes -->
+  <div class="modal-bg" id="settingsModal">
+    <div class="modal">
+      <h2>Ajustes de sincronización</h2>
+      <p class="hint">Para guardar los datos en tu repo de GitHub. Se completa una sola vez y queda guardado en este dispositivo. El token es <b>gratis</b> y solo se guarda acá, en tu celular.</p>
+
+      <details>
+        <summary>¿Cómo genero el token? (paso a paso)</summary>
+        <ol>
+          <li>Andá a GitHub → <b>Settings</b> → <b>Developer settings</b> → <b>Personal access tokens</b> → <b>Fine-grained tokens</b>.</li>
+          <li>Tocá <b>Generate new token</b>.</li>
+          <li>En <b>Repository access</b> elegí <b>Only select repositories</b> → <b>cigcounter</b>.</li>
+          <li>En <b>Permissions → Repository permissions → Contents</b> poné <b>Read and write</b>.</li>
+          <li>Generalo, copialo y pegalo abajo. (No se vuelve a mostrar.)</li>
+        </ol>
+      </details>
+
+      <div class="field">
+        <label>Usuario / organización (owner)</label>
+        <input id="cfgOwner" placeholder="pele-grunwaldt" autocapitalize="off" autocorrect="off" spellcheck="false">
+      </div>
+      <div class="field">
+        <label>Repositorio</label>
+        <input id="cfgRepo" placeholder="cigcounter" autocapitalize="off" autocorrect="off" spellcheck="false">
+      </div>
+      <div class="field">
+        <label>Branch (rama)</label>
+        <input id="cfgBranch" placeholder="main" autocapitalize="off" autocorrect="off" spellcheck="false">
+      </div>
+      <div class="field">
+        <label>Ruta del archivo de datos</label>
+        <input id="cfgPath" placeholder="data/cigarettes.csv" autocapitalize="off" autocorrect="off" spellcheck="false">
+      </div>
+      <div class="field">
+        <label>Token de GitHub</label>
+        <input id="cfgToken" type="password" placeholder="github_pat_..." autocapitalize="off" autocorrect="off" spellcheck="false">
+      </div>
+
+      <div class="actions">
+        <button class="btn" id="cfgCancel">Cancelar</button>
+        <button class="btn primary" id="cfgSave">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+  (function () {
+    "use strict";
+
+    const LS_EVENTS = "cig_events_v1";
+    const LS_CONFIG = "cig_config_v1";
+
+    const $ = (id) => document.getElementById(id);
+
+    // ---------- Estado ----------
+    let events = load(LS_EVENTS, []);   // [{id, ts, synced}]
+    let config = load(LS_CONFIG, {
+      owner: "pele-grunwaldt",
+      repo: "cigcounter",
+      branch: "main",
+      path: "data/cigarettes.csv",
+      token: ""
+    });
+
+    function load(key, fallback) {
+      try { const v = JSON.parse(localStorage.getItem(key)); return v ?? fallback; }
+      catch { return fallback; }
+    }
+    function save(key, val) { localStorage.setItem(key, JSON.stringify(val)); }
+    function saveEvents() { save(LS_EVENTS, events); }
+
+    // ---------- Utilidades de fecha (hora local) ----------
+    function pad(n) { return String(n).padStart(2, "0"); }
+    function localDate(d) { return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
+    function localTime(d) { return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; }
+    function localISO(d) {
+      const off = -d.getTimezoneOffset();
+      const sign = off >= 0 ? "+" : "-";
+      const oh = pad(Math.floor(Math.abs(off)/60));
+      const om = pad(Math.abs(off)%60);
+      return `${localDate(d)}T${localTime(d)}${sign}${oh}:${om}`;
+    }
+    function newId() {
+      return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    }
+
+    // ---------- Acciones ----------
+    function addCigarette() {
+      const now = new Date();
+      events.push({ id: newId(), ts: localISO(now), synced: false });
+      saveEvents();
+      render();
+      toast("🚬 +1");
+      if (navigator.vibrate) navigator.vibrate(15);
+    }
+
+    function undoLast() {
+      if (!events.length) { toast("Nada que deshacer"); return; }
+      // Solo se pueden deshacer los que aún no se sincronizaron.
+      const last = events[events.length - 1];
+      if (last.synced) {
+        toast("Ya sincronizado — editá desde GitHub");
+        return;
+      }
+      events.pop();
+      saveEvents();
+      render();
+      toast("Deshecho");
+    }
+
+    // ---------- Render ----------
+    function tsToDate(ts) { return ts.slice(0, 10); } // YYYY-MM-DD (ya es hora local)
+
+    function groupByDay() {
+      const map = new Map();
+      for (const e of events) {
+        const d = tsToDate(e.ts);
+        map.set(d, (map.get(d) || 0) + 1);
+      }
+      return map;
+    }
+
+    function render() {
+      const today = localDate(new Date());
+      const byDay = groupByDay();
+      const todayN = byDay.get(today) || 0;
+
+      $("todayCount").textContent = todayN;
+      $("todaySub").textContent = todayN === 0 ? "Ningún cigarrillo todavía"
+        : todayN === 1 ? "1 cigarrillo hoy" : `${todayN} cigarrillos hoy`;
+
+      // Stats
+      const days = [...byDay.keys()].sort();
+      let week = 0;
+      const weekAgo = new Date(); weekAgo.setDate(weekAgo.getDate() - 6);
+      const weekAgoStr = localDate(weekAgo);
+      for (const [d, n] of byDay) if (d >= weekAgoStr) week += n;
+      $("statWeek").textContent = week;
+      $("statTotal").textContent = events.length;
+      const distinctDays = byDay.size || 1;
+      $("statAvg").textContent = (events.length / distinctDays).toFixed(1);
+
+      // Historial (desc)
+      const hist = $("history");
+      hist.innerHTML = "";
+      if (byDay.size === 0) {
+        hist.innerHTML = '<div class="empty">Sin registros aún. Tocá "Fumé uno" para empezar.</div>';
+      } else {
+        const sorted = [...byDay.entries()].sort((a,b) => b[0].localeCompare(a[0]));
+        for (const [d, n] of sorted) {
+          const div = document.createElement("div");
+          div.className = "day";
+          div.innerHTML = `<div class="d">${prettyDate(d)}<small>${d}</small></div><div class="n">${n}</div>`;
+          hist.appendChild(div);
+        }
+      }
+
+      const unsynced = events.filter(e => !e.synced).length;
+      $("undoBtn").disabled = unsynced === 0;
+      const sb = $("syncBtn");
+      sb.textContent = unsynced > 0 ? `☁︎ Sincronizar (${unsynced})` : "☁︎ Sincronizado";
+    }
+
+    function prettyDate(d) {
+      const today = localDate(new Date());
+      const y = new Date(); y.setDate(y.getDate() - 1);
+      const yStr = localDate(y);
+      if (d === today) return "Hoy";
+      if (d === yStr) return "Ayer";
+      const dt = new Date(d + "T12:00:00");
+      return dt.toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "short" });
+    }
+
+    // ---------- Toast ----------
+    let toastTimer;
+    function toast(msg) {
+      const t = $("toast");
+      t.textContent = msg;
+      t.classList.add("show");
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => t.classList.remove("show"), 1500);
+    }
+
+    // ---------- Sincronización con GitHub ----------
+    function utf8ToBase64(str) {
+      return btoa(unescape(encodeURIComponent(str)));
+    }
+    function base64ToUtf8(b64) {
+      return decodeURIComponent(escape(atob(b64)));
+    }
+
+    function eventsToCsv(list) {
+      const header = "id,timestamp,date,time";
+      const rows = list.map(e => {
+        const date = e.ts.slice(0, 10);
+        const time = e.ts.slice(11, 19);
+        return `${e.id},${e.ts},${date},${time}`;
+      });
+      return header + "\n" + rows.join("\n") + "\n";
+    }
+
+    function parseCsv(text) {
+      const out = [];
+      const lines = text.split(/\r?\n/).filter(l => l.trim().length);
+      for (let i = 0; i < lines.length; i++) {
+        if (i === 0 && lines[i].startsWith("id,")) continue; // header
+        const parts = lines[i].split(",");
+        if (parts.length < 2) continue;
+        out.push({ id: parts[0], ts: parts[1], synced: true });
+      }
+      return out;
+    }
+
+    function setSyncStatus(msg, cls) {
+      const el = $("syncStatus");
+      el.textContent = msg;
+      el.className = "sync-status" + (cls ? " " + cls : "");
+    }
+
+    async function sync() {
+      if (!config.token) {
+        toast("Configurá el token primero");
+        openSettings();
+        return;
+      }
+      const api = `https://api.github.com/repos/${config.owner}/${config.repo}/contents/${encodeURIComponent(config.path).replace(/%2F/g, "/")}`;
+      const headers = {
+        "Authorization": "Bearer " + config.token,
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28"
+      };
+
+      setSyncStatus("Sincronizando…");
+      $("syncBtn").disabled = true;
+      try {
+        // 1) Leer archivo remoto (si existe)
+        let sha = null;
+        let remoteEvents = [];
+        const getRes = await fetch(`${api}?ref=${encodeURIComponent(config.branch)}`, { headers });
+        if (getRes.status === 200) {
+          const data = await getRes.json();
+          sha = data.sha;
+          if (data.content) remoteEvents = parseCsv(base64ToUtf8(data.content.replace(/\n/g, "")));
+        } else if (getRes.status === 404) {
+          sha = null; // archivo nuevo
+        } else if (getRes.status === 401) {
+          throw new Error("Token inválido o sin permisos (401).");
+        } else if (getRes.status === 403) {
+          throw new Error("Sin permiso de escritura (403). Revisá el scope 'Contents'.");
+        } else {
+          throw new Error("Error al leer: HTTP " + getRes.status);
+        }
+
+        // 2) Merge por ID (unión)
+        const map = new Map();
+        for (const e of remoteEvents) map.set(e.id, e);
+        for (const e of events) map.set(e.id, { id: e.id, ts: e.ts, synced: true });
+        const merged = [...map.values()].sort((a, b) => a.ts.localeCompare(b.ts));
+
+        // 3) Escribir de vuelta
+        const csv = eventsToCsv(merged);
+        const body = {
+          message: `data: sync ${merged.length} cigarrillos (${new Date().toISOString()})`,
+          content: utf8ToBase64(csv),
+          branch: config.branch
+        };
+        if (sha) body.sha = sha;
+
+        const putRes = await fetch(api, { method: "PUT", headers, body: JSON.stringify(body) });
+        if (!putRes.ok) {
+          const err = await putRes.json().catch(() => ({}));
+          throw new Error(`No se pudo guardar (HTTP ${putRes.status}). ${err.message || ""}`);
+        }
+
+        // 4) Estado local = verdad global
+        events = merged;
+        saveEvents();
+        render();
+        setSyncStatus(`✓ Sincronizado — ${merged.length} en total`, "ok");
+        toast("☁︎ Sincronizado");
+      } catch (e) {
+        setSyncStatus("✕ " + e.message, "err");
+        toast("Error al sincronizar");
+      } finally {
+        $("syncBtn").disabled = false;
+      }
+    }
+
+    // ---------- Modal de ajustes ----------
+    function openSettings() {
+      $("cfgOwner").value = config.owner || "";
+      $("cfgRepo").value = config.repo || "";
+      $("cfgBranch").value = config.branch || "main";
+      $("cfgPath").value = config.path || "data/cigarettes.csv";
+      $("cfgToken").value = config.token || "";
+      $("settingsModal").classList.add("open");
+    }
+    function closeSettings() { $("settingsModal").classList.remove("open"); }
+    function saveSettings() {
+      config = {
+        owner: $("cfgOwner").value.trim() || "pele-grunwaldt",
+        repo: $("cfgRepo").value.trim() || "cigcounter",
+        branch: $("cfgBranch").value.trim() || "main",
+        path: $("cfgPath").value.trim() || "data/cigarettes.csv",
+        token: $("cfgToken").value.trim()
+      };
+      save(LS_CONFIG, config);
+      closeSettings();
+      toast("Ajustes guardados");
+      render();
+    }
+
+    // ---------- Eventos ----------
+    $("smokeBtn").addEventListener("click", addCigarette);
+    $("undoBtn").addEventListener("click", undoLast);
+    $("syncBtn").addEventListener("click", sync);
+    $("settingsBtn").addEventListener("click", openSettings);
+    $("cfgCancel").addEventListener("click", closeSettings);
+    $("cfgSave").addEventListener("click", saveSettings);
+    $("settingsModal").addEventListener("click", (e) => {
+      if (e.target === $("settingsModal")) closeSettings();
+    });
+
+    // Service worker (offline)
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("sw.js").catch(() => {});
+      });
+    }
+
+    render();
+  })();
+  </script>
+</body>
+</html>
