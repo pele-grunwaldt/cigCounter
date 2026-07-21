@@ -93,16 +93,42 @@
     /* Historial */
     .section-title { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin: 4px 2px; }
     .list { display: flex; flex-direction: column; gap: 8px; }
-    .day {
+    .day-item {
       background: var(--card); border: 1px solid var(--border); border-radius: 14px;
-      padding: 12px 14px; display: flex; align-items: center; justify-content: space-between;
+      overflow: hidden;
     }
-    .day .d { font-size: 14px; }
+    .day {
+      width: 100%; background: none; border: none; color: var(--text); cursor: pointer;
+      padding: 12px 14px; display: flex; align-items: center; gap: 10px;
+      font: inherit; text-align: left;
+    }
+    .day:active { background: var(--card2); }
+    .day .chevron {
+      color: var(--muted); font-size: 18px; line-height: 1; flex: none;
+      transition: transform 0.18s ease;
+    }
+    .day-item.expanded .chevron { transform: rotate(90deg); }
+    .day .d { font-size: 14px; flex: 1; }
     .day .d small { color: var(--muted); display: block; font-size: 11px; }
     .day .n {
       background: var(--card2); border-radius: 20px; padding: 4px 12px;
-      font-weight: 700; font-size: 15px; min-width: 34px; text-align: center;
+      font-weight: 700; font-size: 15px; min-width: 34px; text-align: center; flex: none;
     }
+    .day-times {
+      display: none; flex-wrap: wrap; gap: 7px;
+      padding: 2px 14px 14px; border-top: 1px solid var(--border);
+      margin-top: -1px;
+    }
+    .day-item.expanded .day-times { display: flex; padding-top: 12px; }
+    .time-chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: var(--card2); border: 1px solid var(--border); border-radius: 10px;
+      padding: 6px 10px; font-size: 13px; font-variant-numeric: tabular-nums;
+    }
+    .time-chip .tnum {
+      color: var(--accent); font-weight: 700; font-size: 11px; min-width: 12px; text-align: right;
+    }
+    .time-chip .gap { color: var(--muted); font-size: 11px; }
     .empty { color: var(--muted); text-align: center; padding: 20px; font-size: 14px; }
 
     .sync-status { font-size: 12px; color: var(--muted); text-align: center; min-height: 16px; }
@@ -314,6 +340,13 @@
       return map;
     }
 
+    // Días que el usuario dejó expandidos (se mantiene entre renders)
+    const expandedDays = new Set();
+
+    function eventsForDay(day) {
+      return events.filter(e => tsToDate(e.ts) === day).sort((a, b) => a.ts.localeCompare(b.ts));
+    }
+
     function render() {
       const today = localDate(new Date());
       const byDay = groupByDay();
@@ -342,10 +375,48 @@
       } else {
         const sorted = [...byDay.entries()].sort((a,b) => b[0].localeCompare(a[0]));
         for (const [d, n] of sorted) {
-          const div = document.createElement("div");
-          div.className = "day";
-          div.innerHTML = `<div class="d">${prettyDate(d)}<small>${d}</small></div><div class="n">${n}</div>`;
-          hist.appendChild(div);
+          const item = document.createElement("div");
+          item.className = "day-item" + (expandedDays.has(d) ? " expanded" : "");
+
+          const head = document.createElement("button");
+          head.className = "day";
+          head.setAttribute("aria-expanded", expandedDays.has(d) ? "true" : "false");
+          head.innerHTML =
+            `<span class="chevron" aria-hidden="true">›</span>` +
+            `<span class="d">${prettyDate(d)}<small>${d}</small></span>` +
+            `<span class="n">${n}</span>`;
+
+          const times = document.createElement("div");
+          times.className = "day-times";
+          const dayEvents = eventsForDay(d);
+          dayEvents.forEach((e, i) => {
+            const hhmm = e.ts.slice(11, 16);
+            let gap = "";
+            if (i > 0) {
+              const prev = new Date(dayEvents[i - 1].ts).getTime();
+              const cur = new Date(e.ts).getTime();
+              const mins = Math.round((cur - prev) / 60000);
+              gap = mins >= 60
+                ? `+${Math.floor(mins / 60)}h ${mins % 60}m`
+                : `+${mins}m`;
+            }
+            const chip = document.createElement("div");
+            chip.className = "time-chip";
+            chip.innerHTML = `<span class="tnum">${i + 1}</span> ${hhmm}` +
+              (gap ? `<span class="gap">${gap}</span>` : "");
+            times.appendChild(chip);
+          });
+
+          head.addEventListener("click", () => {
+            if (expandedDays.has(d)) expandedDays.delete(d);
+            else expandedDays.add(d);
+            item.classList.toggle("expanded");
+            head.setAttribute("aria-expanded", expandedDays.has(d) ? "true" : "false");
+          });
+
+          item.appendChild(head);
+          item.appendChild(times);
+          hist.appendChild(item);
         }
       }
 

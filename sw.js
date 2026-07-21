@@ -1,6 +1,6 @@
 // Service worker: cachea el shell para offline, pero prioriza la red para el
 // HTML así las actualizaciones de la app llegan al celular sin quedar pegadas.
-const CACHE = "cigcounter-v2";
+const CACHE = "cigcounter-v3";
 const ASSETS = ["./", "./index.html", "./manifest.json"];
 
 self.addEventListener("install", (e) => {
