@@ -329,7 +329,32 @@
     }
 
     // ---------- Render ----------
-    function tsToDate(ts) { return ts.slice(0, 10); } // YYYY-MM-DD (ya es hora local)
+    // El "día" arranca a esta hora: un cigarrillo antes de las 5am cuenta en la jornada anterior.
+    const DAY_RESET_HOUR = 5;
+
+    // Día lógico de un timestamp (usa la hora de reloj del propio registro, restándole 5h).
+    function tsToDate(ts) {
+      const y = +ts.slice(0, 4), mo = +ts.slice(5, 7), d = +ts.slice(8, 10);
+      const h = +ts.slice(11, 13), mi = +ts.slice(14, 16);
+      const dt = new Date(y, mo - 1, d, h, mi);
+      dt.setHours(dt.getHours() - DAY_RESET_HOUR);
+      return localDate(dt);
+    }
+
+    // Día lógico "de hoy" según la hora actual.
+    function currentDay() {
+      const dt = new Date();
+      dt.setHours(dt.getHours() - DAY_RESET_HOUR);
+      return localDate(dt);
+    }
+
+    // Día lógico desplazado N días respecto de hoy.
+    function dayOffsetFromToday(deltaDays) {
+      const dt = new Date();
+      dt.setHours(dt.getHours() - DAY_RESET_HOUR);
+      dt.setDate(dt.getDate() + deltaDays);
+      return localDate(dt);
+    }
 
     function groupByDay() {
       const map = new Map();
@@ -348,7 +373,7 @@
     }
 
     function render() {
-      const today = localDate(new Date());
+      const today = currentDay();
       const byDay = groupByDay();
       const todayN = byDay.get(today) || 0;
 
@@ -359,8 +384,7 @@
       // Stats
       const days = [...byDay.keys()].sort();
       let week = 0;
-      const weekAgo = new Date(); weekAgo.setDate(weekAgo.getDate() - 6);
-      const weekAgoStr = localDate(weekAgo);
+      const weekAgoStr = dayOffsetFromToday(-6);
       for (const [d, n] of byDay) if (d >= weekAgoStr) week += n;
       $("statWeek").textContent = week;
       $("statTotal").textContent = events.length;
@@ -427,11 +451,8 @@
     }
 
     function prettyDate(d) {
-      const today = localDate(new Date());
-      const y = new Date(); y.setDate(y.getDate() - 1);
-      const yStr = localDate(y);
-      if (d === today) return "Hoy";
-      if (d === yStr) return "Ayer";
+      if (d === currentDay()) return "Hoy";
+      if (d === dayOffsetFromToday(-1)) return "Ayer";
       const dt = new Date(d + "T12:00:00");
       return dt.toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "short" });
     }
