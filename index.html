@@ -119,6 +119,7 @@
     }
     .day .n.good { color: var(--ok); background: rgba(70,201,58,0.14); }
     .day .n.bad { color: var(--danger); background: rgba(229,72,77,0.14); }
+    .day .ndelta { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; flex: none; }
     .day-times {
       display: none; flex-wrap: wrap; gap: 7px;
       padding: 2px 14px 14px; border-top: 1px solid var(--border);
@@ -207,9 +208,9 @@
   <div class="sync-status" id="syncStatus"></div>
 
   <div class="stats">
-    <div class="stat"><div class="v" id="statGoal">—</div><div class="k">Meta hoy</div></div>
-    <div class="stat"><div class="v" id="statAvg7">—</div><div class="k">Prom. 7 días</div></div>
-    <div class="stat"><div class="v" id="statStreak">0</div><div class="k">Racha ↓</div></div>
+    <div class="stat"><div class="v" id="statMeta">—</div><div class="k">Meta hoy</div></div>
+    <div class="stat"><div class="v" id="statAvg">—</div><div class="k">Prom. diario</div></div>
+    <div class="stat"><div class="v" id="statTrend">—</div><div class="k">Tendencia</div></div>
   </div>
 
   <div class="section-title">Historial</div>
@@ -418,38 +419,52 @@
 
       updateHero();
 
-      // Stats: Meta hoy (= total de ayer), Prom. 7 días (móvil), Racha ↓
-      const yesterdayTotal = byDay.get(dayOffsetFromToday(-1)) || 0;
-      $("statGoal").textContent = yesterdayTotal > 0 ? yesterdayTotal : "—";
+      // Promedio por día sobre una ventana de días completos [from..to] días atrás.
+      const avgWindow = (from, to) => {
+        let s = 0, d = 0;
+        for (let k = from; k <= to; k++) {
+          const c = byDay.get(dayOffsetFromToday(-k));
+          if (c != null) { s += c; d++; }
+        }
+        return d ? s / d : null;
+      };
 
-      let s7 = 0, d7 = 0;
-      for (let k = 1; k <= 7; k++) {
-        const c = byDay.get(dayOffsetFromToday(-k));
-        if (c != null) { s7 += c; d7++; }
+      // Meta hoy = uno menos que ayer (techo que baja).
+      const yTotal = byDay.get(dayOffsetFromToday(-1));
+      $("statMeta").textContent = (yTotal != null && yTotal > 0) ? `≤ ${yTotal - 1}` : "—";
+
+      // Prom. diario: promedio de los días completos (últimos 7).
+      const avg7 = avgWindow(1, 7);
+      $("statAvg").textContent = avg7 != null ? (Math.round(avg7 * 10) / 10).toString() : "—";
+
+      // Tendencia: últimos 7 días vs los 7 anteriores.
+      const prev7 = avgWindow(8, 14);
+      const trendEl = $("statTrend");
+      trendEl.style.color = "";
+      if (avg7 != null && prev7 != null && prev7 > 0) {
+        const pct = Math.round(((avg7 - prev7) / prev7) * 100);
+        if (pct < 0) { trendEl.textContent = `↓ ${Math.abs(pct)}%`; trendEl.style.color = "var(--ok)"; }
+        else if (pct > 0) { trendEl.textContent = `↑ ${pct}%`; trendEl.style.color = "var(--danger)"; }
+        else { trendEl.textContent = "→ 0%"; trendEl.style.color = "var(--muted)"; }
+      } else {
+        trendEl.textContent = "—";
       }
-      $("statAvg7").textContent = d7 ? (Math.round((s7 / d7) * 10) / 10).toString() : "—";
 
-      // Racha: días completos (hasta ayer) seguidos fumando menos que el día anterior
-      const trackedAsc = [...byDay.entries()].filter(([d]) => d < today).sort((a, b) => a[0].localeCompare(b[0]));
-      let streak = 0;
-      for (let i = trackedAsc.length - 1; i >= 1; i--) {
-        if (trackedAsc[i][1] < trackedAsc[i - 1][1]) streak++;
-        else break;
-      }
-      $("statStreak").textContent = streak;
-
-      // Color de cada día del historial: hoy vs ayer-a-esta-hora; días previos vs su día anterior
+      // Referencia de cada día del historial: color + delta.
+      // Hoy se compara con ayer-a-esta-hora; los días previos con su día anterior registrado.
       const orderedDays = [...byDay.keys()].sort();
       const pace = paceVsYesterday();
-      const nClass = (dayKey, count) => {
+      const dayRef = (dayKey, count) => {
+        let ref = null;
         if (dayKey === today) {
-          if (!pace.yHasData) return "";
-          return count < pace.ySoFar ? "good" : count > pace.ySoFar ? "bad" : "";
+          if (pace.yHasData) ref = pace.ySoFar;
+        } else {
+          const idx = orderedDays.indexOf(dayKey);
+          if (idx > 0) ref = byDay.get(orderedDays[idx - 1]);
         }
-        const idx = orderedDays.indexOf(dayKey);
-        if (idx <= 0) return "";
-        const prev = byDay.get(orderedDays[idx - 1]);
-        return count < prev ? "good" : count > prev ? "bad" : "";
+        if (ref == null) return { cls: "", delta: null };
+        const delta = count - ref;
+        return { cls: delta < 0 ? "good" : delta > 0 ? "bad" : "", delta };
       };
 
       // Historial (desc)
@@ -466,10 +481,15 @@
           const head = document.createElement("button");
           head.className = "day";
           head.setAttribute("aria-expanded", expandedDays.has(d) ? "true" : "false");
+          const ref = dayRef(d, n);
+          const deltaHtml = ref.delta != null && ref.delta !== 0
+            ? `<span class="ndelta">${ref.delta > 0 ? "+" : "−"}${Math.abs(ref.delta)}</span>`
+            : "";
           head.innerHTML =
             `<span class="chevron" aria-hidden="true">›</span>` +
             `<span class="d">${prettyDate(d)}<small>${d}</small></span>` +
-            `<span class="n ${nClass(d, n)}">${n}</span>`;
+            deltaHtml +
+            `<span class="n ${ref.cls}">${n}</span>`;
 
           const times = document.createElement("div");
           times.className = "day-times";
@@ -630,7 +650,7 @@
         events = merged;
         saveEvents();
         render();
-        setSyncStatus(`✓ Sincronizado — ${merged.length} en total`, "ok");
+        setSyncStatus("✓ Sincronizado", "ok");
         toast("☁︎ Sincronizado");
       } catch (e) {
         setSyncStatus("✕ " + e.message, "err");
