@@ -57,8 +57,11 @@
       padding: 22px; text-align: center;
     }
     .today .label { color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: 1px; }
-    .today .count { font-size: 76px; font-weight: 800; line-height: 1; margin: 6px 0; letter-spacing: -2px; }
-    .today .sub { color: var(--muted); font-size: 13px; }
+    .today .count { font-size: 76px; font-weight: 800; line-height: 1; margin: 6px 0; letter-spacing: -2px; transition: color 0.3s ease; }
+    .today .count.ahead { color: var(--ok); }
+    .today .count.behind { color: var(--danger); }
+    .today .count.tie { color: var(--accent); }
+    .today .sub { color: var(--muted); font-size: 13px; min-height: 16px; }
 
     /* Botón grande */
     .smoke-btn {
@@ -114,6 +117,8 @@
       background: var(--card2); border-radius: 20px; padding: 4px 12px;
       font-weight: 700; font-size: 15px; min-width: 34px; text-align: center; flex: none;
     }
+    .day .n.good { color: var(--ok); background: rgba(70,201,58,0.14); }
+    .day .n.bad { color: var(--danger); background: rgba(229,72,77,0.14); }
     .day-times {
       display: none; flex-wrap: wrap; gap: 7px;
       padding: 2px 14px 14px; border-top: 1px solid var(--border);
@@ -202,9 +207,9 @@
   <div class="sync-status" id="syncStatus"></div>
 
   <div class="stats">
-    <div class="stat"><div class="v" id="statWeek">0</div><div class="k">7 días</div></div>
-    <div class="stat"><div class="v" id="statAvg">0</div><div class="k">Prom/día</div></div>
-    <div class="stat"><div class="v" id="statTotal">0</div><div class="k">Total</div></div>
+    <div class="stat"><div class="v" id="statGoal">—</div><div class="k">Meta hoy</div></div>
+    <div class="stat"><div class="v" id="statAvg7">—</div><div class="k">Prom. 7 días</div></div>
+    <div class="stat"><div class="v" id="statStreak">0</div><div class="k">Racha ↓</div></div>
   </div>
 
   <div class="section-title">Historial</div>
@@ -356,6 +361,11 @@
       return localDate(dt);
     }
 
+    // Minutos transcurridos desde el arranque del día lógico (5am). Las horas antes
+    // de las 5 pertenecen al día anterior, así que quedan "tarde" (>19h).
+    function minsIntoDay(h, mi) { return ((h - DAY_RESET_HOUR) * 60 + mi + 1440) % 1440; }
+    function minsIntoDayTs(ts) { return minsIntoDay(+ts.slice(11, 13), +ts.slice(14, 16)); }
+
     function groupByDay() {
       const map = new Map();
       for (const e of events) {
@@ -372,24 +382,75 @@
       return events.filter(e => tsToDate(e.ts) === day).sort((a, b) => a.ts.localeCompare(b.ts));
     }
 
+    // Compara hoy contra ayer "a esta hora" (mismo tiempo transcurrido desde las 5am).
+    function paceVsYesterday() {
+      const today = currentDay();
+      const yesterday = dayOffsetFromToday(-1);
+      const byDay = groupByDay();
+      const todayN = byDay.get(today) || 0;
+      const yEvents = eventsForDay(yesterday);
+      const nowM = minsIntoDay(new Date().getHours(), new Date().getMinutes());
+      const ySoFar = yEvents.filter(e => minsIntoDayTs(e.ts) <= nowM).length;
+      return { today, yesterday, todayN, ySoFar, yHasData: yEvents.length > 0 };
+    }
+
+    // Actualiza solo el héroe (número + comparación). Corre en cada render y cada minuto.
+    function updateHero() {
+      const { todayN, ySoFar, yHasData } = paceVsYesterday();
+      const countEl = $("todayCount");
+      const subEl = $("todaySub");
+      countEl.textContent = todayN;
+      countEl.classList.remove("ahead", "behind", "tie");
+      if (!yHasData) {
+        subEl.textContent = todayN === 0 ? "Ningún cigarrillo todavía"
+          : (todayN === 1 ? "1 cigarrillo hoy" : `${todayN} cigarrillos hoy`) + " · sin día anterior para comparar";
+        return;
+      }
+      const diff = todayN - ySoFar;
+      if (diff < 0) { countEl.classList.add("ahead"); subEl.textContent = `Ayer a esta hora: ${ySoFar} · vas ${-diff} menos 🟢`; }
+      else if (diff > 0) { countEl.classList.add("behind"); subEl.textContent = `Ayer a esta hora: ${ySoFar} · vas ${diff} más 🔴`; }
+      else { countEl.classList.add("tie"); subEl.textContent = `Ayer a esta hora: ${ySoFar} · igual que ayer`; }
+    }
+
     function render() {
       const today = currentDay();
       const byDay = groupByDay();
-      const todayN = byDay.get(today) || 0;
 
-      $("todayCount").textContent = todayN;
-      $("todaySub").textContent = todayN === 0 ? "Ningún cigarrillo todavía"
-        : todayN === 1 ? "1 cigarrillo hoy" : `${todayN} cigarrillos hoy`;
+      updateHero();
 
-      // Stats
-      const days = [...byDay.keys()].sort();
-      let week = 0;
-      const weekAgoStr = dayOffsetFromToday(-6);
-      for (const [d, n] of byDay) if (d >= weekAgoStr) week += n;
-      $("statWeek").textContent = week;
-      $("statTotal").textContent = events.length;
-      const distinctDays = byDay.size || 1;
-      $("statAvg").textContent = (events.length / distinctDays).toFixed(1);
+      // Stats: Meta hoy (= total de ayer), Prom. 7 días (móvil), Racha ↓
+      const yesterdayTotal = byDay.get(dayOffsetFromToday(-1)) || 0;
+      $("statGoal").textContent = yesterdayTotal > 0 ? yesterdayTotal : "—";
+
+      let s7 = 0, d7 = 0;
+      for (let k = 1; k <= 7; k++) {
+        const c = byDay.get(dayOffsetFromToday(-k));
+        if (c != null) { s7 += c; d7++; }
+      }
+      $("statAvg7").textContent = d7 ? (Math.round((s7 / d7) * 10) / 10).toString() : "—";
+
+      // Racha: días completos (hasta ayer) seguidos fumando menos que el día anterior
+      const trackedAsc = [...byDay.entries()].filter(([d]) => d < today).sort((a, b) => a[0].localeCompare(b[0]));
+      let streak = 0;
+      for (let i = trackedAsc.length - 1; i >= 1; i--) {
+        if (trackedAsc[i][1] < trackedAsc[i - 1][1]) streak++;
+        else break;
+      }
+      $("statStreak").textContent = streak;
+
+      // Color de cada día del historial: hoy vs ayer-a-esta-hora; días previos vs su día anterior
+      const orderedDays = [...byDay.keys()].sort();
+      const pace = paceVsYesterday();
+      const nClass = (dayKey, count) => {
+        if (dayKey === today) {
+          if (!pace.yHasData) return "";
+          return count < pace.ySoFar ? "good" : count > pace.ySoFar ? "bad" : "";
+        }
+        const idx = orderedDays.indexOf(dayKey);
+        if (idx <= 0) return "";
+        const prev = byDay.get(orderedDays[idx - 1]);
+        return count < prev ? "good" : count > prev ? "bad" : "";
+      };
 
       // Historial (desc)
       const hist = $("history");
@@ -408,7 +469,7 @@
           head.innerHTML =
             `<span class="chevron" aria-hidden="true">›</span>` +
             `<span class="d">${prettyDate(d)}<small>${d}</small></span>` +
-            `<span class="n">${n}</span>`;
+            `<span class="n ${nClass(d, n)}">${n}</span>`;
 
           const times = document.createElement("div");
           times.className = "day-times";
@@ -667,6 +728,11 @@
     }
 
     render();
+
+    // Refresco en vivo: la comparación "vs ayer a esta hora" avanza con el reloj.
+    setInterval(updateHero, 60000);
+    // Al volver a la app (cambiar de pestaña/desbloquear) refrescar el día y el ritmo.
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) render(); });
   })();
   </script>
 </body>
